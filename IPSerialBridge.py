@@ -49,12 +49,13 @@ class IPSerialBridge:
         response = ""
         while(still_reading):
             try:
-                response += self.socket.recv(1024)
-                print "read() output ", response
+                response += self.socket.recv(1)
+                print "read response: ", response
             except socket.error, (value, message):
                 if(value == errno.EWOULDBLOCK or value == errno.EAGAIN):
+                    print message # should be commented out, just check out error
                     pass
-                    # still_reading = 0
+                    still_reading = 0 # should be commented out
                 else:
                     print "Network error"
                     pass  # TODO deal with this
@@ -64,6 +65,7 @@ class IPSerialBridge:
         
         if(self.verbose):
             print("RECEIVED (%s; %s): %s" % (self.address, str(self), response))
+
         
         return response
 
@@ -130,13 +132,13 @@ class IPSerialBridge:
             if(len(ready_to_read) != 0):
                 ready = 1
             if(time.time() - tic > timeout):
-                print ready
+                # print "time up"
                 return ""
         #print "%.3f" % (time.time() - tic),
         #r = self.read()
         #print r
         #return r
-        return "read output ", self.read()
+        return self.read()
         
 
 # PumpInfuse = """01 FUN RAT
@@ -154,7 +156,7 @@ PumpInfuse = """01 DIR INF
 #     01 RUN\r"""
 
 PumpWDraw = """01 DIR WDR
-    01 VOL 0.02
+    01 VOL 0.04
     01 RUN\r"""
 
 
@@ -167,8 +169,8 @@ if __name__ == "__main__":
     print "Connecting"
     bridge.connect()
 
-    print "Testing"
-    response = bridge.send("Test")
+    # print "Testing"
+    # response = bridge.send("Test")
 
 
     print "What test would you like to perform?"
@@ -181,15 +183,20 @@ if __name__ == "__main__":
     if cmdIndex == 1:
         print "infusing"
         for command in PumpInfuse.splitlines():
-            bridge.send(command,1)
+            cmd = command.strip()
+            response = bridge.send(cmd,0)
+            print "out ", response
             # print "send output", the_msg
     elif cmdIndex == 2:
         print "withdrawing"
         for command in PumpWDraw.splitlines():
-            bridge.send(command,1)
+            cmd = command.strip()
+            response = bridge.send(cmd,0)
+            print "out ", response
     elif cmdIndex == 3:
         print "stopping"
-        bridge.send("01 STP",1)
+        response = bridge.send("01 STP",1)
+        print "out ", response
     else:
         print "Unknown command..."
 
