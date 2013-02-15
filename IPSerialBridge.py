@@ -11,6 +11,8 @@ import time
 import socket
 import select
 
+import sys
+
 
 
 
@@ -26,12 +28,29 @@ class IPSerialBridge:
         self.disconnect()
     
     def connect(self, timeout=1):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        self.socket.settimeout(timeout)#timeout)
-        self.socket.connect((self.address, self.port)) #(self.address, self.port)
-        self.socket.setblocking(0)
-        self.socket.settimeout(0)
+        try:
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            self.socket.settimeout(timeout)#timeout)
+        except socket.error, e:
+            print "Some error creating socket: %s" % e
+            sys.exit(1)
+
+        try:
+            self.socket.connect((self.address, self.port)) #(self.address, self.port)
+            self.socket.setblocking(0)
+            self.socket.settimeout(0)
+        except socket.gaierror, e:
+            print "Address-related error connecting to server: %s" % e
+            sys.exit(1)
+        except socket.error, e:
+            print "Connection error: %s" % e
+            sys.exit(1)
+        # self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        # self.socket.settimeout(timeout)#timeout)
+        # self.socket.connect((self.address, self.port)) #(self.address, self.port)
+        # self.socket.setblocking(0)
+        # self.socket.settimeout(0)
         #self.kq = select.kqueue()
         #self.kq.control([select.kevent(self.socket, select.KQ_FILTER_READ, select.KQ_EV_ADD)],0)
 
@@ -47,18 +66,28 @@ class IPSerialBridge:
     def read(self):
         still_reading = 1
         response = ""
-        while(still_reading):
+
+        while(still_reading and len(response)<5):
             try:
-                response += self.socket.recv(1)
-                print "read response: ", response
+                response += self.socket.recv(5)
+                print "added response from recv: ", response
+                print "response length: ", len(response)
+                if len(response) == 5:
+                    still_reading = 1
             except socket.error, (value, message):
-                if(value == errno.EWOULDBLOCK or value == errno.EAGAIN):
-                    print message # should be commented out, just check out error
-                    pass
-                    still_reading = 0 # should be commented out
-                else:
-                    print "Network error"
-                    pass  # TODO deal with this
+                print "READ error val: %s" % value
+                print "READ error msg: %s" % message
+                # sys.exit(1)
+                # if(value == errno.EWOULDBLOCK or value == errno.EAGAIN):
+                    # time.sleep(5.0)
+                    # pass
+                    # print message # should be commented out, just check out error
+                    # pass
+                    # still_reading = 0 # should be commented out
+                # else:
+                    # print "Network error"
+                    # pass  # TODO deal with this
+
             if(response != None and len(response) > 0 and response[-1] == '\n'):
                 still_reading = 0
         
@@ -93,7 +122,7 @@ class IPSerialBridge:
         # send the outgoing message
         self.socket.send(message + "\n\r")
         
-        self.verbose = 1
+        # self.verbose = 0
         if(self.verbose):
             print("SENDING (%s; %s): %s\n\r" % (self.address, str(self), message))
         
@@ -120,21 +149,20 @@ class IPSerialBridge:
         ##read the response, 50 ms
         #print "reading",
         ready = 0
-        print "ready val ", ready
+        # print "ready val ", ready
         retry_timeout = 0.1
         timeout = 30.0
         tic = time.time()
         while(not ready):
-            #print "tick", time.time() - tic,
+            # print "tick", time.time() - tic,
             # takes ~50 ms
             (ready_to_read, ready_to_write, in_error) = select.select([self.socket],[],[self.socket], retry_timeout)
-            #print "tock", time.time() - tic,
+            # print "tock", time.time() - tic,
             if(len(ready_to_read) != 0):
                 ready = 1
             if(time.time() - tic > timeout):
-                # print "time up"
                 return ""
-        #print "%.3f" % (time.time() - tic),
+        # print "%.3f" % (time.time() - tic),
         #r = self.read()
         #print r
         #return r
@@ -148,7 +176,7 @@ class IPSerialBridge:
 
 PumpInfuse = """01 DIR INF
     01 VOL 0.02
-    01 RUN\r"""    
+    01 RUN"""    
 
 # PumpWDraw = """01 FUN RAT
 #     01 DIR WDR
@@ -157,7 +185,7 @@ PumpInfuse = """01 DIR INF
 
 PumpWDraw = """01 DIR WDR
     01 VOL 0.04
-    01 RUN\r"""
+    01 RUN"""
 
 
 if __name__ == "__main__":
@@ -167,7 +195,24 @@ if __name__ == "__main__":
     bridge.verbose = 1
     
     print "Connecting"
-    bridge.connect()
+    connecting = None
+    try:
+        connecting = bridge.connect()
+    except socket.error as msg:
+        print "stuff went bad: ", msg
+
+    # connecting.close()
+    # connecting = bridge.connect()
+    # if connecting != 0:
+    #     sys.exit(1)
+
+    print "Testing"
+    try: 
+        response = bridge.send("Test")
+    except socket.error as msg:
+        print "Stuff went bad: ", msg
+
+     # connecting.close()
 
     # print "Testing"
     # response = bridge.send("Test")
@@ -183,10 +228,10 @@ if __name__ == "__main__":
     if cmdIndex == 1:
         print "infusing"
         for command in PumpInfuse.splitlines():
-            cmd = command.strip()
+            cmd = command.strip() 
             response = bridge.send(cmd,0)
+            print "Attempting cmd: %s" % cmd 
             print "out ", response
-            # print "send output", the_msg
     elif cmdIndex == 2:
         print "withdrawing"
         for command in PumpWDraw.splitlines():
@@ -200,7 +245,6 @@ if __name__ == "__main__":
     else:
         print "Unknown command..."
 
-# bridge.disconnect()
 
 print "out of loop"
 
