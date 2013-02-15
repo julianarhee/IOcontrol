@@ -1,9 +1,9 @@
 #
 #  IPSerialBridge.py
-#  EyeTrackerStageDriver
+#  Basic NE500 pump control.
 #
-#  Created by David Cox on 11/12/08.
-#  Copyright (c) 2008 Harvard University. All rights reserved.
+#  DATE: 02.15.2013 (jyr)
+#  
 #
 
 import errno
@@ -54,8 +54,6 @@ class IPSerialBridge:
         #self.kq = select.kqueue()
         #self.kq.control([select.kevent(self.socket, select.KQ_FILTER_READ, select.KQ_EV_ADD)],0)
 
-    # def release(self):
-    #     self.socket.close()
         
     def disconnect(self):
         #self.kq.control([select.kevent(self.socket, select.KQ_FILTER_READ, select.KQ_EV_DELETE)],0)
@@ -199,7 +197,8 @@ if __name__ == "__main__":
     try:
         connecting = bridge.connect()
     except socket.error as msg:
-        print "stuff went bad: ", msg
+        print "Sending during CONNECTING went bad: ", msg
+        # sys.exit(1)
 
     # connecting.close()
     # connecting = bridge.connect()
@@ -210,7 +209,7 @@ if __name__ == "__main__":
     try: 
         response = bridge.send("Test")
     except socket.error as msg:
-        print "Stuff went bad: ", msg
+        print "Sending during TESTING went bad: ", msg
 
      # connecting.close()
 
