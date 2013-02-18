@@ -127,10 +127,13 @@ class IPSerial(object):
         (ready_to_read, ready_to_write, in_error) = select.select([self.socket],[],[self.socket], 0)
         # print ready_to_read
         if(len(ready_to_read) != 0):
-            r = self.read()
-        else:
-            r = self.read()
-        print r
+            self.read()
+
+        # if(len(ready_to_read) != 0):
+        #     r = self.read()
+        # else:
+        #     r = self.read()
+        # print r
 
         # send the outgoing message
         self.socket.send(message + "\n\r")
@@ -144,7 +147,7 @@ class IPSerial(object):
         if(noresponse):
             return
 
-        return r
+        # return r
 
     
     # def read(self, nbytes=-1):
