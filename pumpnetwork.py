@@ -62,19 +62,6 @@ class IPSerial(object):
         except socket.error, e:
             print "Some error creating socket: %s" % e
             sys.exit(1)
-
-        # FROM IPSerialBridge.py:  
-        # try:
-        #     self.socket.connect((self.address, self.port)) #(self.address, self.port)
-        #     self.socket.setblocking(0)
-        #     self.socket.settimeout(0)
-        # except socket.gaierror, e:
-        #     print "Address-related error connecting to server: %s" % e
-        #     sys.exit(1)
-        # except socket.error, e:
-        #     print "Connection error: %s" % e
-        #     sys.exit(1)
-
         try:
             self.socket.connect((self.address, self.port))
         except socket.timeout as E:
@@ -95,134 +82,133 @@ class IPSerial(object):
 
 
     # read, write_then_read  is actually:  read(), send() (from IPSerialBridge.py)
-    def read(self):
-        # msg_receipt = 0
-        still_reading = 1
-        resp = ""
+    # def read(self):
+    #     # msg_receipt = 0
+    #     still_reading = 1
+    #     resp = ""
 
-        while(still_reading and len(resp)<5):
-            try:
-                resp += self.socket.recv(5)
-                # print "added response from recv: ", resp
-                # print "response length: ", len(resp)
-                if len(resp) >= 5:
-                    still_reading = 1
-            except socket.error, (value, message):
-                print "READ error val: %s" % value
-                print "READ error msg: %s" % message
+    #     while(still_reading and len(resp)<5):
+    #         try:
+    #             resp += self.socket.recv(5)
+    #             # print "added response from recv: ", resp
+    #             # print "response length: ", len(resp)
+    #             if len(resp) >= 5:
+    #                 still_reading = 1
+    #         except socket.error, (value, message):
+    #             print "READ error val: %s" % value
+    #             print "READ error msg: %s" % message
 
-            if(resp != None and len(resp) > 0 and resp[-1] == '\n'):
-                still_reading = 0
+    #         if(resp != None and len(resp) > 0 and resp[-1] == '\n'):
+    #             still_reading = 0
         
-        if(self.verbose):
-            print("RECEIVED (%s; %s): %s" % (self.address, str(self), resp))
+    #     if(self.verbose):
+    #         print("RECEIVED (%s; %s): %s" % (self.address, str(self), resp))
+
+    #     return resp
+
+
+    # def write_then_read(self, message, noresponse=0):
+        
+    #     # check the socket to see if there is junk in there already on the receive side
+    #     # if so, this is here in error, and should be flushed
+    #     (ready_to_read, ready_to_write, in_error) = select.select([self.socket],[],[self.socket], 0)
+    #     # print ready_to_read
+    #     if(len(ready_to_read) != 0):
+    #         self.read()
+
+    #     # if(len(ready_to_read) != 0):
+    #     #     r = self.read()
+    #     # else:
+    #     #     r = self.read()
+    #     # print r
+
+    #     # send the outgoing message
+    #     self.socket.send(message + "\n\r")
+        
+    #     # self.verbose = 0
+    #     if(self.verbose):
+    #         print("SENDING (%s; %s): %s\n\r" % (self.address, str(self), message))
+        
+    #     time.sleep(1.0)  # allow some time to pass
+        
+    #     if(noresponse):
+    #         return
+
+    
+    def read(self, nbytes=-1):
+        """
+        read nbytes from the socket
+        
+        if nbytes 0, return ""
+        if nbytes <0, read until a timeout
+        """
+        if self.socket is None:
+            raise IOError("read called on not-connected socket")
+        if nbytes == 0:
+            return ""
+        resp = ""
+        if nbytes < 0:
+            break_on_timeout = True
+            nbytes = 1
+        else:
+            break_on_timeout = False
+        ntimeouts = 0
+        while len(resp) < nbytes:
+            r, _, _ = select.select([self.socket], [], [], self.timeout)
+            if len(r) != 0:
+                resp += self.socket.recv(1)
+            else:
+                if break_on_timeout:
+                    return resp
+                else:
+                    ntimeouts += 1
+                    if ntimeouts >= self.max_timeouts:
+                        raise IOError('read timed out too many times [%s >= %s]' % \
+                            (ntimeouts, self.max_timeouts))
+                    time.sleep(self.sleep_on_timeout)
+            # if we're waiting for a timeout, keep reading until we get one
+            if break_on_timeout:
+                nbytes = len(resp) + 1
 
         return resp
 
-
-    def write_then_read(self, message, noresponse=0):
+    
+    def write(self, data):
+        """
+        write data to the socket
         
-        # check the socket to see if there is junk in there already on the receive side
-        # if so, this is here in error, and should be flushed
-        (ready_to_read, ready_to_write, in_error) = select.select([self.socket],[],[self.socket], 0)
-        # print ready_to_read
-        if(len(ready_to_read) != 0):
-            self.read()
-
-        # if(len(ready_to_read) != 0):
-        #     r = self.read()
-        # else:
-        #     r = self.read()
-        # print r
-
-        # send the outgoing message
-        self.socket.send(message + "\n\r")
-        
-        # self.verbose = 0
-        if(self.verbose):
-            print("SENDING (%s; %s): %s\n\r" % (self.address, str(self), message))
-        
-        time.sleep(1.0)  # allow some time to pass
-        
-        if(noresponse):
-            return
-
-        # return r
+        data : str
+            data to write
+        """
+        if self.socket is None:
+            raise IOError("write called on not-connected socket")
+        ntimeouts = 0
+        while ntimeouts < self.max_timeouts:
+            _, w, _ = select.select([], [self.socket], [], self.timeout)
+            if (len(w) != 0):
+                self.socket.send(data)
+                return
+        raise IOError('write timed out too many times [%s >= %s]' % \
+            (ntimeouts, self.max_timeouts))
 
     
-    # def read(self, nbytes=-1):
-    #     """
-    #     read nbytes from the socket
+    def write_then_read(self, data, nbytes=-1, pause=0.1):
+        """
+        write, then read from the socket (with an options brief pause)
         
-    #     if nbytes 0, return ""
-    #     if nbytes <0, read until a timeout
-    #     """
-    #     if self.socket is None:
-    #         raise IOError("read called on not-connected socket")
-    #     if nbytes == 0:
-    #         return ""
-    #     resp = ""
-    #     if nbytes < 0:
-    #         break_on_timeout = True
-    #         nbytes = 1
-    #     else:
-    #         break_on_timeout = False
-    #     ntimeout = 0
-    #     while len(resp) < nbytes:
-    #         r, _, _ = select.select([self.socket], [], [], self.timeout)
-    #         if len(r) != 0:
-    #             resp += self.socket.recv(1)
-    #         else:
-    #             if break_on_timeout and len(resp) >= 5: # added 'and'
-    #                 return resp
-    #             else:
-    #                 ntimeouts += 1
-    #                 if ntimeouts >= self.max_timeouts:
-    #                     raise IOError('read timed out too many times [%s >= %s]' % \
-    #                         (ntimeouts, self.max_timeouts))
-    #                 time.sleep(self.sleep_on_timeout)
-    #         # if we're waiting for a timeout, keep reading until we get one
-    #         if break_on_timeout:
-    #             nbytes = len(resp) + 1
-    #     return resp
+        data : str
+            see write
+        
+        nbytes : int
+            see read
+        
+        pause : float
+            seconds to wait between write and read
+        """
+        self.write(data)
+        time.sleep(pause)
 
-    
-    # def write(self, data):
-    #     """
-    #     write data to the socket
-        
-    #     data : str
-    #         data to write
-    #     """
-    #     if self.socket is None:
-    #         raise IOError("write called on not-connected socket")
-    #     ntimeouts = 0
-    #     while ntimeouts < self.max_timeouts:
-    #         _, w, _ = select.select([], [self.socket], [], self.timeout)
-    #         if (len(w) != 0):
-    #             self.socket.send(data)
-    #             return
-    #     raise IOError('write timed out too many times [%s >= %s]' % \
-    #         (ntimeouts, self.max_timeouts))
-
-
-    
-    # def write_then_read(self, data, nbytes=-1, pause=0.1):
-    #     """
-    #     write, then read from the socket (with an options brief pause)
-        
-    #     data : str
-    #         see write
-        
-    #     nbytes : int
-    #         see read
-        
-    #     pause : float
-    #         seconds to wait between write and read
-    #     """
-    #     self.write(data)
-    #     time.sleep(pause)
-    #     return self.read(nbytes)
+        return self.read(nbytes)
 
 
 
@@ -244,6 +230,48 @@ class NE500Network(IPSerial):
         self.nsetups = kwargs.pop('nsetups', 4)
         IPSerial.__init__(self, *args, **kwargs)
 
+
+    def connect(self, timeout=1, pump_wait=0.1):
+        IPSerial.connect(self, timeout)
+        time.sleep(pump_wait)
+        return self.read()
+
+    def response_read(self, nbytes=5):
+        assert nbytes > 2
+        resp = IPSerial.read(self, nbytes)
+
+        while not ('\x02' in resp and '\x03' in resp):
+            resp = IPSerial.read(self, nbytes)
+            print resp
+
+        if(self.verbose):
+            print("RECEIVED (%s; %s): %s" % (self.address, str(self), resp))
+
+        return resp
+
+    def call_and_response(self, data, nbytes=5, pause=0.1):
+        if data[-1] != '\r':
+            data += '\r'
+        self.write(data)
+
+        if(self.verbose):
+            print("SENDING (%s; %s): %s\n\r" % (self.address, str(self), data))
+
+        time.sleep(pause)
+
+        return self.response_read(nbytes)
+
+    def call_and_read(self, data, nbytes=-1, pause=0.1):
+        if data[-1] != '\r':
+            data += '\r'
+        self.write(data)
+
+        if(self.verbose):
+            print("SENDING (%s; %s): %s\n\r" % (self.address, str(self), data))
+
+        time.sleep(pause)
+
+        return self.read()
 
     def infuse(self, pump, volume):
         assert ((pump > 0) and (pump <= self.npumps))
@@ -318,52 +346,126 @@ class NE500Network(IPSerial):
         params : list of str elements
 
         'cleaning' : dict
-            {'DIA':'15.0', 'RAT':'100.0', 'VOL':'1.0', 'DIR':'REV', 'DIS':'10.0'}
+            {'DIA':'15.0', 'RAT':'100.0', 'VOL':'1.0', 'DIR':'WDR'}
+
+        'cleaning_rev' : dict
+            {'DIA':'15.0', 'RAT':'100.0', 'VOL':'1.0', 'DIR':'INF'}
 
         'training' : dict 
-            {'DIA':'15.0', 'RAT':'100.0', 'VOL':'0.02', 'DIR':'INF', 'DIS':'0.0'}
+            {'DIA':'15.0', 'RAT':'100.0', 'VOL':'0.02', 'DIR':'INF'}
         """
 
-        cmds = ['DIA', 'RAT', 'VOL', 'DIR', 'CLD', 'CLD']
+        cmds = ['DIA', 'RAT', 'VOL', 'DIR']
         if mode == 'cleaning':
             # faster rate than training mode - first, infuse 10.0ml, then withdraw.
-            params = ['15.0', '500.0', '0.5', 'INF', 'INF', 'WDR']
+            params = ['15.0', '500.0', '0.5', 'INF']
             pump_commands = dict(zip(cmds, params))
         elif mode == 'cleaning_rev':
-            # reverse, from infuse, now WITHDRAW same amt..
-            params = ['15.0', '500.0', '0.2', 'WDR', 'INF', 'WDR']
+            # reverse, from infuse, now WITHDRAW same amt...
+            params = ['15.0', '500.0', '0.5', 'WDR']
             pump_commands = dict(zip(cmds, params))
 
         elif mode == 'training':
-            params = ['15.0', '100.0', '0.02', 'INF', 'INF', 'WDR'] # default
+            params = ['15.0', '100.0', '0.02', 'INF'] # default
             pump_commands = dict(zip(cmds, params))
         return pump_commands
 
+    def run_commands(self, pumpID, commandset, ncycles=1, npumps=1):
+        try:
+            print "Running commands to pump network..."
+            print "commands: ", commandset
+            status = self.call_and_response('%02i\r' % pumpID)
+            while not 'S' in status:
+                status = self.call_and_response('%02i\r' % pumpID)
+
+            print "SENDING commandset..."  
+            for i, cmd in enumerate(commandset.keys()):
+                print cmd
+                # right now, this sends 1 command to 1 pump at a time...
+                if npumps == 1:
+                    reply = self.call_and_response('%02i %s %s\r' \
+                                % (pumpID, cmd, commandset[cmd]), nbytes=5)
+                    print reply
+                elif npumps > 1:
+                    for p in range(1, npumps+1):
+                        status = self.call_and_response('%02i\r' % p)
+                        while not 'S' in status:
+                            status = self.call_and_response('%02i\r' % p)
+                        reply = self.call_and_response('%02i %s %s\r' \
+                                    % (p, cmd, commandset[cmd]), nbytes=5)
+                        print reply
 
 
-    def run_commandset(self, pumpID, commandset, npumps=1): # commandset is a dict (pump_commands):
+            print "Now, RUNNING commandset..."  
+            if npumps == 1:
+                runreply = self.call_and_response('%02i RUN\r' % pumpID, nbytes=5)
+            elif npumps == 2:
+                for p in range(1, npumps+1):
+                    status = self.call_and_response('%02i\r' % p)
+                    while not 'S' in status:
+                        status = self.call_and_response('%02i\r' % p)
+                    print "all good, pump %i" % p
+                # self.write_then_read('01 ADR DUAL\r')
+                runreply = self.call_and_read('*RUN\r', nbytes=2)
+                print runreply
+                # self.write_then_read('* ADR 01\r')
+            print "Completed cycle." 
+        except socket.error, (value, message):
+            print "READ error val: %s" % value
+            print "READ error msg: %s" % message
+
+
+    def run_commandset(self, pumpID, commandset, ncycles=1, npumps=1): # commandset is a dict (pump_commands):
     
         print "Running commands to pump network..."
         print "commands: ", commandset
 
-        for i, cmd in enumerate(commandset.keys()):
-            try:
-                # right now, this sends 1 command to 1 pump at a time...
-                for p in range(1, npumps+1):
-                    self.write_then_read('%02i %s %s\r' % (p, cmd, commandset[cmd]))
-                print cmd
-            except socket.error, (value, message):
-                print "READ error val: %s" % value
-                print "READ error msg: %s" % message
+        # FIRST, sends the paramater commands to each pump:
+        try:    
+            for n in range(ncycles):
+                status = self.call_and_response('%02i\r' % pumpID)
+                while not 'S' in status:
+                    status = self.call_and_response('%02i\r' % pumpID)
 
-        if npumps == 1:
-            self.write_then_read('%02i RUN\r' % pumpID)
-        elif npumps == 2:
-            # self.write_then_read('01 ADR DUAL\r')
-            self.write_then_read('*RUN\r')
-            # self.write_then_read('* ADR 01\r')
+                print "Starting CYCLE: %i" % n
+                for i, cmd in enumerate(commandset.keys()):
+                    print cmd
+                    # right now, this sends 1 command to 1 pump at a time...
+                    for p in range(1, npumps+1):
+                        reply = self.call_and_response('%02i %s %s\r' \
+                                    % (p, cmd, commandset[cmd]), nbytes=5)
+                        print reply
 
-        # n.disconnect()
+                print "Now, RUNNING commandset, for cycle: %i" % n
+                if n == 0: # first cycle, or only 1 cycle
+                    if npumps == 1:
+                        runreply = self.call_and_response('%02i RUN\r' % pumpID, nbytes=5)
+                    elif npumps == 2:
+                        # self.write_then_read('01 ADR DUAL\r')
+                        runreply = self.call_and_response('*RUN\r', nbytes=5)
+                        # self.write_then_read('* ADR 01\r')
+                    print "Completed first cycle."
+                elif n > 0:
+                    # print 'got to next cycle: cycle %i' % n
+                    # DON'T SEND THE NEXT "RUN" command until pump done with first "run"
+                    # if 'I' in runreply:
+                    # status = self.call_and_response('%02i\r' % pumpID)
+                    # while not 'S' in status:
+                    #     status = self.call_and_response('%02i\r' % pumpID)
+
+                    if npumps == 1:
+                        runreply = self.call_and_response('%02i RUN\r' % pumpID, nbytes=5)
+                    elif npumps == 2:
+                        # self.write_then_read('01 ADR DUAL\r')
+                        runreply = self.call_and_response('*RUN\r', nbytes=5)
+                        # self.write_then_read('* ADR 01\r')
+                    print "Completed CYCLE NO: %i" % n
+        except socket.error, (value, message):
+            print "READ error val: %s" % value
+            print "READ error msg: %s" % message
+
+
+        return runreply
         print "Successful command run."
 
 
@@ -401,7 +503,7 @@ def set_pump_network(setupID, pumpID, ipAddress, port, npumps=1):
     print "Setting up commands for pump network:  setup %i, pump %02i..." \
                 % (setupID, pumpID)
     n = NE500Network(ipAddress, port)
-    n.verbose = 1
+    n.verbose = 0
 
 
     def set_commandset(mode): # q, t, or c.
@@ -421,12 +523,13 @@ def set_pump_network(setupID, pumpID, ipAddress, port, npumps=1):
             except:
                 print "Invalid entry, pump configuration not set. Try again."
                 return 0
+
             # run command set:
             try:
-                if npumps == 1:
-                    n.run_commandset(pumpID, pump_commands, npumps=1)
-                if npumps == 2:
-                    n.run_commandset(pumpID, pump_commands, npumps=2)
+                # if npumps == 1:
+                n.run_commands(pumpID, pump_commands, npumps=npumps)
+                # if npumps == 2:
+                #     n.run_commandset(pumpID, pump_commands, npumps=2)
                 print "ran commandset"
             except socket.error, (value, message):
                 print "READ error val: %s" % value
@@ -441,25 +544,50 @@ def set_pump_network(setupID, pumpID, ipAddress, port, npumps=1):
 
             nphase = 0
             for i in range(ncycles):
+                # get the command set...
                 try:
                     if nphase == 0: 
+                        print "Getting commandset for cleaning phase %i" % nphase
                         pump_commands = n.get_commandset('cleaning')
                         nphase = 1
                     elif nphase == 1:
+                        print "Getting commandset for cleaning phase %i" % nphase
                         pump_commands = n.get_commandset('cleaning_rev')
                         nphase = 0
-                    print "got commandset"
-                except:
-                    print "Invalid entry, pump configuration not set. Try again."
-                    return 0
+                    print "got commandset, for cycle: %i" % i
+
                 # run command set:
-                try:
+                    print "Running commandset on pump: %i" % pumpID
                     if npumps == 1:
-                        n.run_commandset(pumpID, pump_commands, npumps=1)
-                    if npumps == 2:
-                        n.run_commandset(pumpID, pump_commands, npumps=2)
-                    # n.stop(pumpID)
-                    print "ran commandset, cycle %i" % i
+                        runreply = n.run_commands(pumpID, pump_commands, ncycles=ncycles, npumps=npumps)
+                    elif npumps > 1:
+                        runreply = n.run_commands(pumpID, pump_commands, ncycles=ncycles, npumps=npumps)
+                        # runreply = n.call_and_response('*RUN\r', nbytes=5)
+                    # if i == 0:
+                    #     # if npumps == 1:
+                    #     runreply = n.run_commandset(pumpID, pump_commands, ncycles=ncycles, npumps=npumps)
+                    #     # if npumps == 2:
+                    #     #     runreply = n.run_commandset(pumpID, pump_commands, ncycles, npumps=2)
+                    #     # n.stop(pumpID)
+                    # elif i > 0:
+                    #     print "run reply: ", runreply
+                    #     # if ('I' in runreply) or ('W' in runreply):
+                    #     #     print "yes"
+                    #     #     status = n.call_and_response('%02i\r' % pumpID)
+                    #     #     while not 'S' in status:
+                    #     #         status = n.call_and_response('%02i\r' % pumpID)
+                    #     #                             status = n.call_and_response('%02i\r' % pumpID)
+                        
+                    #     # status = n.call_and_response('%02i\r' % pumpID)
+                    #     # while not 'S' in status:
+                    #     #     status = n.call_and_response('%02i\r' % pumpID)
+
+                    #     # if npumps == 1:
+                    #     n.run_commandset(pumpID, pump_commands, ncycles=ncycles, npumps=npumps)
+                    #     # if npumps == 2:
+                    #     #     n.run_commandset(pumpID, pump_commands, npumps=2)
+
+                    # print "ran commandset, cycle %i" % i
                 except socket.error, (value, message):
                     print "READ error val: %s" % value
                     print "READ error msg: %s" % message
@@ -630,23 +758,26 @@ if __name__ == '__main__':
             setupIDs.append(sidx)
             ipAddresses.append(IPs[sidx-1][2])
         print setupIDs
-        
-        print "Which pump? Left / Right / Both: [1]/[2]/[3]"
+
+        print "How many pumps on setup?"
         npumps = int(raw_input())
-        if npumps == 1 or npumps == 2:
-            pumpID = npumps
+        
+        if npumps == 1:
+            print "Which pump? Left / Right: [1]/[2]"
+            pumpID = int(raw_input())
             for s, ip in zip(setupIDs, ipAddresses):
                 print "Running pump %02i, on setup%i, address %s..." \
                         % (pumpID, s, ip)
-                set_pump_network(s, pumpID, ip, port)
+                set_pump_network(s, pumpID, ip, port, npumps)
 
-        elif npumps == 3:
-            pumpIDs = [1, 2]
+        elif npumps == 2:
+            # pumpIDs = [1, 2]
+            pumpID = 1
             for s, ip in zip(setupIDs, ipAddresses):
-                for pumpID in pumpIDs:
-                    print "Running BOTH pumps, on setup%i, address %s..." \
-                            % (s, ip)
-                    set_pump_network(s, pumpID, ip, port, npumps=2)
+                # for pumpID in pumpIDs:
+                print "Running BOTH pumps, on setup%i, address %s..." \
+                        % (s, ip)
+                set_pump_network(s, pumpID, ip, port, npumps)
 
 
 
