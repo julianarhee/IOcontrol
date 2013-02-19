@@ -71,7 +71,6 @@ class IPSerial(object):
             # reraise
             raise E
         self.socket.settimeout(None)
-
     
     def disconnect(self):
         if self.socket is not None:
@@ -79,61 +78,6 @@ class IPSerial(object):
             self.socket.close()
             del self.socket
             self.socket = None
-
-
-    # read, write_then_read  is actually:  read(), send() (from IPSerialBridge.py)
-    # def read(self):
-    #     # msg_receipt = 0
-    #     still_reading = 1
-    #     resp = ""
-
-    #     while(still_reading and len(resp)<5):
-    #         try:
-    #             resp += self.socket.recv(5)
-    #             # print "added response from recv: ", resp
-    #             # print "response length: ", len(resp)
-    #             if len(resp) >= 5:
-    #                 still_reading = 1
-    #         except socket.error, (value, message):
-    #             print "READ error val: %s" % value
-    #             print "READ error msg: %s" % message
-
-    #         if(resp != None and len(resp) > 0 and resp[-1] == '\n'):
-    #             still_reading = 0
-        
-    #     if(self.verbose):
-    #         print("RECEIVED (%s; %s): %s" % (self.address, str(self), resp))
-
-    #     return resp
-
-
-    # def write_then_read(self, message, noresponse=0):
-        
-    #     # check the socket to see if there is junk in there already on the receive side
-    #     # if so, this is here in error, and should be flushed
-    #     (ready_to_read, ready_to_write, in_error) = select.select([self.socket],[],[self.socket], 0)
-    #     # print ready_to_read
-    #     if(len(ready_to_read) != 0):
-    #         self.read()
-
-    #     # if(len(ready_to_read) != 0):
-    #     #     r = self.read()
-    #     # else:
-    #     #     r = self.read()
-    #     # print r
-
-    #     # send the outgoing message
-    #     self.socket.send(message + "\n\r")
-        
-    #     # self.verbose = 0
-    #     if(self.verbose):
-    #         print("SENDING (%s; %s): %s\n\r" % (self.address, str(self), message))
-        
-    #     time.sleep(1.0)  # allow some time to pass
-        
-    #     if(noresponse):
-    #         return
-
     
     def read(self, nbytes=-1):
         """
@@ -171,7 +115,6 @@ class IPSerial(object):
                 nbytes = len(resp) + 1
 
         return resp
-
     
     def write(self, data):
         """
@@ -190,7 +133,6 @@ class IPSerial(object):
                 return
         raise IOError('write timed out too many times [%s >= %s]' % \
             (ntimeouts, self.max_timeouts))
-
     
     def write_then_read(self, data, nbytes=-1, pause=0.1):
         """
@@ -211,7 +153,6 @@ class IPSerial(object):
         return self.read(nbytes)
 
 
-
 class NE500Network(IPSerial):
     def __init__(self, *args, **kwargs):
         """
@@ -229,7 +170,6 @@ class NE500Network(IPSerial):
         self.npumps = kwargs.pop('npumps', 1)
         self.nsetups = kwargs.pop('nsetups', 4)
         IPSerial.__init__(self, *args, **kwargs)
-
 
     def connect(self, timeout=1, pump_wait=0.1):
         IPSerial.connect(self, timeout)
@@ -324,16 +264,13 @@ class NE500Network(IPSerial):
         # '?OOR' = command data out of range
         # 'A' = alarm
 
-
     def stop(self, pump):
         assert ((pump > 0) and (pump <= self.npumps))
         self.write_then_read('%02i STP\r' % pump)
 
-
     def reset(self, pump):
         """This will reset ALL pump params, regardless of its address"""
         self.write_then_read('%02i * RESET\r' % pump)
-
 
     def get_commandset(self, mode):
         """set of pertinent commands and associated parameters for particular pump modes
@@ -358,11 +295,11 @@ class NE500Network(IPSerial):
         cmds = ['DIA', 'RAT', 'VOL', 'DIR']
         if mode == 'cleaning':
             # faster rate than training mode - first, infuse 10.0ml, then withdraw.
-            params = ['15.0', '500.0', '0.5', 'INF']
+            params = ['15.0', '500.0', '1.0', 'INF']
             pump_commands = dict(zip(cmds, params))
         elif mode == 'cleaning_rev':
             # reverse, from infuse, now WITHDRAW same amt...
-            params = ['15.0', '500.0', '0.5', 'WDR']
+            params = ['15.0', '500.0', '1.0', 'WDR']
             pump_commands = dict(zip(cmds, params))
 
         elif mode == 'training':
@@ -395,7 +332,6 @@ class NE500Network(IPSerial):
                                     % (p, cmd, commandset[cmd]), nbytes=5)
                         print reply
 
-
             print "Now, RUNNING commandset..."  
             if npumps == 1:
                 runreply = self.call_and_response('%02i RUN\r' % pumpID, nbytes=5)
@@ -405,10 +341,8 @@ class NE500Network(IPSerial):
                     while not 'S' in status:
                         status = self.call_and_response('%02i\r' % p)
                     print "all good, pump %i" % p
-                # self.write_then_read('01 ADR DUAL\r')
                 runreply = self.call_and_read('*RUN\r', nbytes=2)
                 print runreply
-                # self.write_then_read('* ADR 01\r')
             print "Completed cycle." 
         except socket.error, (value, message):
             print "READ error val: %s" % value
@@ -420,7 +354,6 @@ class NE500Network(IPSerial):
         print "Running commands to pump network..."
         print "commands: ", commandset
 
-        # FIRST, sends the paramater commands to each pump:
         try:    
             for n in range(ncycles):
                 status = self.call_and_response('%02i\r' % pumpID)
@@ -468,7 +401,6 @@ class NE500Network(IPSerial):
         return runreply
         print "Successful command run."
 
-
     # other commnds of interest (for pump network):  
     
     # address:  ADR [<address(0-99)>],[DUAL|RECP] -- DUAL for running same commands to both connected pumps 
@@ -479,7 +411,6 @@ class NE500Network(IPSerial):
 
     # volume dispensed: DIS -- just queries, returns: I<float> W<float> <vol units>, good for how much liquid dispensed!
     # clear volume dispensd:  CLD {INF|WIDR} -- sets to 0.
-
 
 
 def set_pump_network(setupID, pumpID, ipAddress, port, npumps=1):
@@ -505,7 +436,6 @@ def set_pump_network(setupID, pumpID, ipAddress, port, npumps=1):
     n = NE500Network(ipAddress, port)
     n.verbose = 0
 
-
     def set_commandset(mode): # q, t, or c.
         """return 0 to continue, else exit"""
         if mode == '':
@@ -517,6 +447,7 @@ def set_pump_network(setupID, pumpID, ipAddress, port, npumps=1):
 
             # set training mode:
             print "Training mode ON"
+            # get the command set...
             try:
                 pump_commands = n.get_commandset('training')
                 print "got commandset"
@@ -526,10 +457,7 @@ def set_pump_network(setupID, pumpID, ipAddress, port, npumps=1):
 
             # run command set:
             try:
-                # if npumps == 1:
                 n.run_commands(pumpID, pump_commands, npumps=npumps)
-                # if npumps == 2:
-                #     n.run_commandset(pumpID, pump_commands, npumps=2)
                 print "ran commandset"
             except socket.error, (value, message):
                 print "READ error val: %s" % value
@@ -562,32 +490,7 @@ def set_pump_network(setupID, pumpID, ipAddress, port, npumps=1):
                         runreply = n.run_commands(pumpID, pump_commands, ncycles=ncycles, npumps=npumps)
                     elif npumps > 1:
                         runreply = n.run_commands(pumpID, pump_commands, ncycles=ncycles, npumps=npumps)
-                        # runreply = n.call_and_response('*RUN\r', nbytes=5)
-                    # if i == 0:
-                    #     # if npumps == 1:
-                    #     runreply = n.run_commandset(pumpID, pump_commands, ncycles=ncycles, npumps=npumps)
-                    #     # if npumps == 2:
-                    #     #     runreply = n.run_commandset(pumpID, pump_commands, ncycles, npumps=2)
-                    #     # n.stop(pumpID)
-                    # elif i > 0:
-                    #     print "run reply: ", runreply
-                    #     # if ('I' in runreply) or ('W' in runreply):
-                    #     #     print "yes"
-                    #     #     status = n.call_and_response('%02i\r' % pumpID)
-                    #     #     while not 'S' in status:
-                    #     #         status = n.call_and_response('%02i\r' % pumpID)
-                    #     #                             status = n.call_and_response('%02i\r' % pumpID)
-                        
-                    #     # status = n.call_and_response('%02i\r' % pumpID)
-                    #     # while not 'S' in status:
-                    #     #     status = n.call_and_response('%02i\r' % pumpID)
 
-                    #     # if npumps == 1:
-                    #     n.run_commandset(pumpID, pump_commands, ncycles=ncycles, npumps=npumps)
-                    #     # if npumps == 2:
-                    #     #     n.run_commandset(pumpID, pump_commands, npumps=2)
-
-                    # print "ran commandset, cycle %i" % i
                 except socket.error, (value, message):
                     print "READ error val: %s" % value
                     print "READ error msg: %s" % message
@@ -599,7 +502,6 @@ def set_pump_network(setupID, pumpID, ipAddress, port, npumps=1):
         
         return pump_commands
 
-
     def print_commandset():
         print
         print "Enter pump network mode:"
@@ -609,14 +511,11 @@ def set_pump_network(setupID, pumpID, ipAddress, port, npumps=1):
         print_configs()
         print
 
-
     def print_configs():
         pump_commands_training = n.get_commandset('training')
         pump_commands_cleaning = n.get_commandset('cleaning')
         print "t: train (current config): \n", pump_commands_training
         print "c: clean (current config): \n", pump_commands_cleaning
-
-
 
     while True:
         # set parameter/quit
@@ -626,30 +525,10 @@ def set_pump_network(setupID, pumpID, ipAddress, port, npumps=1):
         didit = 1
         if didit == 1:
             break
-        # if set_commandset(r):
-        #     break
 
     # n.disconnect()
     return pump_commands    
     # print "Pump network mode set."
-
-
-# def run_commandset(commandset, pumpID, ipAddress, port): # commandset is a dict (pump_commands):
-    
-#     print "Running commands to pump network..."
-
-#     n = NE500Network(ipAddress, port)
-#     n.verbose = 0
-
-#     print "got here"
-
-#     for i, cmd in enumerate(commandset.keys()):
-#         n.write_then_read('%02i %s %s\r' % (pumpID, cmd, commandset[cmd]))
-#         n.write_then_read('%02i RUN\r' % pumpID)
-#         print cmd
-
-#     print "Pump commands completed."
-
 
 def run_command_burst(commandset, setupID, ipAddress, port, pumps=[1,2]):
     """run 2 or more pumps simultaneously in a given network 
@@ -695,7 +574,6 @@ def run_command_burst(commandset, setupID, ipAddress, port, pumps=[1,2]):
         print "Ran command: %s, on all set pumps." % cmd
 
     print "All commands completed."
-
 
 
 if __name__ == '__main__':
@@ -744,7 +622,6 @@ if __name__ == '__main__':
         commandset = set_pump_network(setupID, pumpID, ipAddress, port)
         # run_commandset(commandset, pumpID, ipAddress, port)
 
-
     elif runIndex == 2:
         print "How many setups are you running?"
         nsetups = int(raw_input())
@@ -761,7 +638,6 @@ if __name__ == '__main__':
 
         print "How many pumps on setup?"
         npumps = int(raw_input())
-        
         if npumps == 1:
             print "Which pump? Left / Right: [1]/[2]"
             pumpID = int(raw_input())
@@ -769,17 +645,12 @@ if __name__ == '__main__':
                 print "Running pump %02i, on setup%i, address %s..." \
                         % (pumpID, s, ip)
                 set_pump_network(s, pumpID, ip, port, npumps)
-
         elif npumps == 2:
-            # pumpIDs = [1, 2]
             pumpID = 1
             for s, ip in zip(setupIDs, ipAddresses):
-                # for pumpID in pumpIDs:
                 print "Running BOTH pumps, on setup%i, address %s..." \
                         % (s, ip)
                 set_pump_network(s, pumpID, ip, port, npumps)
-
-
 
     elif runIndex == 3:
         # get list of setups to be run
